@@ -68,7 +68,7 @@
 
     <div class="row">
       <div class="form-group">
-        <label>Unlock Time (HH:MM:SS)</label>
+        <label>Unlock Time (HH:MM:SS - IST India Time)</label>
         <input type="time" step="1" id="targetTime">
       </div>
       <div class="form-group">
@@ -154,7 +154,6 @@
       await fetch('/api/disarm', { method: 'POST' });
     }
 
-    // Live Auto-Refresh every 1.5 seconds
     setInterval(async () => {
       try {
         const res = await fetch('/api/status');
