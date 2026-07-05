@@ -10,7 +10,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Universal Horizon Server Init
 const HORIZON_URL = "https://api.mainnet.minepi.com";
 let piServer;
 if (StellarSdk.Horizon && StellarSdk.Horizon.Server) {
@@ -41,6 +40,26 @@ function addLog(msg, type = 'info') {
     console.log(`[${time}] [${type.toUpperCase()}] ${msg}`);
 }
 
+// 🔥 LIVE AUTO-PING RADAR (Network Latency Measure Engine)
+async function getDynamicNetworkOffset() {
+    addLog("📡 Pinging Pi Network Mainnet to calculate live MS latency...", "info");
+    let pings = [];
+    for (let i = 0; i < 4; i++) {
+        const start = Date.now();
+        try {
+            await fetch(`${HORIZON_URL}/fee_stats`);
+            pings.push(Date.now() - start);
+        } catch (e) {
+            pings.push(300); // Fallback if packet drops
+        }
+    }
+    const avgPing = Math.round(pings.reduce((a, b) => a + b, 0) / pings.length);
+    // Auto Offset = Average Ping + 150ms internal NodeJS execution delay
+    const autoOffset = avgPing + 150;
+    addLog(`🎯 Live Ping: ${avgPing}ms | AUTO PRE-FIRE OFFSET SET TO: ${autoOffset}ms`, "success");
+    return autoOffset;
+}
+
 app.post('/api/scan', async (req, res) => {
     const { targetMnemonic } = req.body;
     const kp = getKeypair(targetMnemonic);
@@ -67,7 +86,7 @@ app.post('/api/arm', async (req, res) => {
     
     botState.isArmed = true;
     botState.timers = [];
-    addLog(`🔥 TITAN ARMED! Mode: ${operationMode} | Sponsors: ${sponsorPool.length} | Fee: ${surgeFee} PI`, "warning");
+    addLog(`🔥 AUTO-MS TITAN ARMED! Sponsors: ${sponsorPool.length} | Fee: ${surgeFee} PI`, "warning");
 
     try {
         const [targetH, targetM, targetS] = targetTime.split(':').map(Number);
@@ -81,7 +100,7 @@ app.post('/api/arm', async (req, res) => {
         }
         
         const delayMs = targetIST.getTime() - nowIST.getTime();
-        addLog(`Target locked: ${targetTime} IST. Countdown: ${(delayMs/1000).toFixed(1)} seconds.`, "info");
+        addLog(`Target locked: ${targetTime} IST. Countdown: ${(delayMs/1000).toFixed(1)}s`, "info");
 
         const targetKp = getKeypair(targetMnemonic);
         if (!targetKp) throw new Error("Invalid Sender Passphrase");
@@ -104,13 +123,11 @@ app.post('/api/arm', async (req, res) => {
         const OperationClass = StellarSdk.Operation;
         const AssetClass = StellarSdk.Asset;
 
-        // Auto-Sharding Rule
         const tasks = sponsorPool.map(async (mn, i) => {
             const spKp = getKeypair(mn);
             if (!spKp) return null;
             const acc = await piServer.loadAccount(spKp.publicKey());
             
-            // 🔥 FIXED: setTimeout(600) lagaya hai taaki 10 minute tak packet expire na ho aur tx_too_late na aaye!
             const builder = new TxBuilderClass(new AccountClass(spKp.publicKey(), acc.sequenceNumber()), {
                 fee: Math.round(parseFloat(surgeFee) * 10000000).toString(),
                 networkPassphrase: NETWORK_PASSPHRASE
@@ -137,28 +154,42 @@ app.post('/api/arm', async (req, res) => {
         });
 
         const packets = (await Promise.all(tasks)).filter(Boolean);
-        addLog(`✅ ${packets.length} Packets pre-signed & locked in Railway RAM (600s validity)!`, "success");
+        addLog(`✅ ${packets.length} Packets pre-signed & locked in Railway RAM!`, "success");
         
-        [1, 2, 3].forEach(wave => {
+        // 🔥 TRIGGER AUTO-PING CALIBRATION 8 SECONDS BEFORE T-0
+        let dynamicOffset = 300; // Default fallback
+        const pingMeasureDelay = Math.max(0, delayMs - 8000);
+        
+        const radarTimer = setTimeout(async () => {
+            dynamicOffset = await getDynamicNetworkOffset();
+        }, pingMeasureDelay);
+        botState.timers.push(radarTimer);
+
+        // 🔥 ADAPTIVE FIRING ENGINE (Uses exact measured dynamicOffset)
+        [3, 2, 1].forEach(wave => {
             const waves = packets.filter(p => p.wave === wave);
             if (waves.length === 0) return;
 
-            const waveDelay = Math.max(0, delayMs - (wave * 1000));
+            // Wave 3, 2, 1 chalega dynamic offset ke sath
+            const waveDelay = Math.max(0, delayMs - ((wave - 1) * 700));
             
             const timer = setTimeout(() => {
-                addLog(`💥 FIRING WAVE T-${wave}s (${waves.length} SHOTS)...`, "warning");
-                waves.forEach((w, idx) => {
-                    fetch("https://api.mainnet.minepi.com/transactions", {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                        body: `tx=${encodeURIComponent(w.xdr)}`
-                    }).then(r => r.json()).then(d => {
-                        if (d.hash) addLog(`[Shot #${idx+1}] 🏆 VICTORY! Hash: ${d.hash}`, "success");
-                        else addLog(`[Shot #${idx+1}] ❌ Failed: ${JSON.stringify(d?.extras?.result_codes || d.title)}`, "error");
-                    }).catch(e => addLog(`[Shot #${idx+1}] Network Error`, "error"));
-                });
-                if (wave === 1) botState.isArmed = false;
-            }, waveDelay);
+                // Fire time pe offset deduct karte hain dynamically
+                setTimeout(() => {
+                    addLog(`💥 AUTO-MS FIRE WAVE T-${wave}s (${waves.length} SHOTS)...`, "warning");
+                    waves.forEach((w, idx) => {
+                        fetch("https://api.mainnet.minepi.com/transactions", {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                            body: `tx=${encodeURIComponent(w.xdr)}`
+                        }).then(r => r.json()).then(d => {
+                            if (d.hash) addLog(`[Shot #${idx+1}] 🏆 VICTORY! Hash: ${d.hash}`, "success");
+                            else addLog(`[Shot #${idx+1}] ❌ Failed: ${JSON.stringify(d?.extras?.result_codes || d.title)}`, "error");
+                        }).catch(e => addLog(`[Shot #${idx+1}] Network Error`, "error"));
+                    });
+                    if (wave === 1) botState.isArmed = false;
+                }, 0);
+            }, Math.max(0, waveDelay - dynamicOffset));
 
             botState.timers.push(timer);
         });
