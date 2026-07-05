@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TITAN RAILWAY SNIPER</title>
+  <title>TITAN RAILWAY CLOUD SNIPER</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #08080c; color: #e2e8f0; font-family: 'Courier New', monospace; padding: 20px; }
-    .container { max-width: 650px; margin: 0 auto; background: #101016; border: 1px solid #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 0 20px rgba(16, 185, 129, 0.1); }
-    h1 { color: #10b981; font-size: 24px; text-align: center; margin-bottom: 5px; }
+    .container { max-width: 650px; margin: 0 auto; background: #101016; border: 1px solid #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 0 20px rgba(16, 185, 129, 0.15); }
+    h1 { color: #10b981; font-size: 24px; text-align: center; margin-bottom: 5px; font-weight: 900; }
     .subtitle { text-align: center; font-size: 11px; color: #64748b; margin-bottom: 20px; letter-spacing: 2px; }
     .form-group { margin-bottom: 15px; }
     label { display: block; font-size: 11px; font-weight: bold; color: #94a3b8; margin-bottom: 6px; text-transform: uppercase; }
@@ -19,8 +19,8 @@
     .btn-scan { background: #047857; color: white; margin-top: 6px; }
     .btn-arm { background: #10b981; color: #064e3b; margin-top: 10px; font-size: 16px; }
     .btn-disarm { background: #991b1b; color: #fecaca; margin-top: 10px; display: none; }
-    .logs-box { margin-top: 20px; background: #050508; border: 1px solid #1e293b; border-radius: 6px; padding: 12px; height: 220px; overflow-y: auto; font-size: 11px; }
-    .log-entry { margin-bottom: 4px; border-bottom: 1px solid #111; padding-bottom: 2px; }
+    .logs-box { margin-top: 20px; background: #050508; border: 1px solid #1e293b; border-radius: 6px; padding: 12px; height: 230px; overflow-y: auto; font-size: 11px; }
+    .log-entry { margin-bottom: 5px; border-bottom: 1px solid #111; padding-bottom: 3px; }
     .log-time { color: #475569; }
     .info { color: #60a5fa; }
     .success { color: #34d399; font-weight: bold; }
@@ -57,8 +57,8 @@
     </div>
 
     <div class="form-group">
-      <label>Gas Sponsor Pool (1 line = 1 mnemonic)</label>
-      <textarea id="sponsorPool" rows="3" placeholder="Paste 1, 10, or 30 sponsor passphrases..."></textarea>
+      <label>Gas Sponsor Pool (1 line = 1 sponsor passphrase)</label>
+      <textarea id="sponsorPool" rows="3" placeholder="Paste 1, 5, or 30 passphrases... System auto-shards 1 Tx per passphrase!"></textarea>
     </div>
 
     <div class="form-group">
