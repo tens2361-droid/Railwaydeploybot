@@ -35,7 +35,6 @@ function getKeypair(mnemonic) {
 let botState = { isArmed: false, logs: [], timers: [] };
 
 function addLog(msg, type = 'info') {
-    // Force Indian Standard Time (IST) in logs
     const time = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
     botState.logs.unshift({ time, msg, type });
     if (botState.logs.length > 100) botState.logs.pop();
@@ -71,19 +70,16 @@ app.post('/api/arm', async (req, res) => {
     addLog(`🔥 TITAN ARMED! Mode: ${operationMode} | Sponsors: ${sponsorPool.length} | Fee: ${surgeFee} PI`, "warning");
 
     try {
-        // 🔥 PERFECT TIMEZONE FIX (Converts IST Target Time to UTC Timestamp exactly)
         const [targetH, targetM, targetS] = targetTime.split(':').map(Number);
         const nowIST = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
         
         let targetIST = new Date(nowIST);
         targetIST.setHours(targetH, targetM, targetS || 0, 0);
         
-        // If time passed today in IST, set for tomorrow
         if (targetIST.getTime() <= nowIST.getTime()) {
             targetIST.setDate(targetIST.getDate() + 1);
         }
         
-        // Calculate exact delay from current absolute time
         const delayMs = targetIST.getTime() - nowIST.getTime();
         addLog(`Target locked: ${targetTime} IST. Countdown: ${(delayMs/1000).toFixed(1)} seconds.`, "info");
 
@@ -108,16 +104,17 @@ app.post('/api/arm', async (req, res) => {
         const OperationClass = StellarSdk.Operation;
         const AssetClass = StellarSdk.Asset;
 
-        // Auto-Sharding Rule: 1 Sponsor = 1 Tx, 5 Sponsor = 5 Tx
+        // Auto-Sharding Rule
         const tasks = sponsorPool.map(async (mn, i) => {
             const spKp = getKeypair(mn);
             if (!spKp) return null;
             const acc = await piServer.loadAccount(spKp.publicKey());
             
+            // 🔥 FIXED: setTimeout(600) lagaya hai taaki 10 minute tak packet expire na ho aur tx_too_late na aaye!
             const builder = new TxBuilderClass(new AccountClass(spKp.publicKey(), acc.sequenceNumber()), {
                 fee: Math.round(parseFloat(surgeFee) * 10000000).toString(),
                 networkPassphrase: NETWORK_PASSPHRASE
-            }).setTimeout(60);
+            }).setTimeout(600);
 
             if (operationMode === 'claim_and_transfer') {
                 builder.addOperation(OperationClass.claimClaimableBalance({
@@ -140,14 +137,12 @@ app.post('/api/arm', async (req, res) => {
         });
 
         const packets = (await Promise.all(tasks)).filter(Boolean);
-        addLog(`✅ ${packets.length} Packets pre-signed & locked in Railway RAM!`, "success");
+        addLog(`✅ ${packets.length} Packets pre-signed & locked in Railway RAM (600s validity)!`, "success");
         
-        // Exact Millisecond Fire Engine
         [1, 2, 3].forEach(wave => {
             const waves = packets.filter(p => p.wave === wave);
             if (waves.length === 0) return;
 
-            // Fire T-3s, T-2s, T-1s before target
             const waveDelay = Math.max(0, delayMs - (wave * 1000));
             
             const timer = setTimeout(() => {
