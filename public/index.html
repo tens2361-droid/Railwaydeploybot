@@ -83,7 +83,7 @@
     </div>
 
     <button class="btn btn-arm" id="armBtn" onclick="armBot()">🔥 ARM TITAN CLOUD BOT 🔥</button>
-    <button class="btn btn-disarm" id="disarmBtn" onclick="disarmBot()">🛑 ABORT EXECUTION</button>
+    <button class="btn btn-disarm" id="disarmBtn" onclick="disarmBot()">🛑 ABORT & RESET EXECUTION</button>
 
     <div class="logs-box" id="logsBox">
       <div class="log-entry"><span class="log-time">[System]</span> <span class="info">Ready for Railway connection...</span></div>
@@ -91,39 +91,41 @@
   </div>
 
   <script>
-    let balancesData = [];
-
     async function scanBalances() {
       const mnemonic = document.getElementById('targetMnemonic').value;
       if (!mnemonic) return alert('Enter passphrase first');
       document.getElementById('scanBtn').innerText = 'SCANNING...';
 
-      const res = await fetch('/api/scan', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ targetMnemonic: mnemonic })
-      });
-      const data = await res.json();
-      document.getElementById('scanBtn').innerText = 'SCAN LOCKED BALANCES';
-
-      if (data.success && data.balances.length > 0) {
-        balancesData = data.balances;
-        const select = document.getElementById('balanceSelect');
-        select.innerHTML = '';
-        data.balances.forEach((b, i) => {
-          select.innerHTML += `<option value="${b.id}">#${i+1} - ${b.amount} PI (Unlock: ${b.absBefore || 'Unknown'})</option>`;
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ targetMnemonic: mnemonic })
         });
-        document.getElementById('balanceGroup').style.display = 'block';
-        if (data.balances[0].absBefore) {
-          const t = new Date(data.balances[0].absBefore);
-          document.getElementById('targetTime').value = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}`;
+        const data = await res.json();
+        document.getElementById('scanBtn').innerText = 'SCAN LOCKED BALANCES';
+
+        if (data.success && data.balances.length > 0) {
+          const select = document.getElementById('balanceSelect');
+          select.innerHTML = '';
+          data.balances.forEach((b, i) => {
+            select.innerHTML += `<option value="${b.id}">#${i+1} - ${b.amount} PI</option>`;
+          });
+          document.getElementById('balanceGroup').style.display = 'block';
+        } else {
+          alert(data.error || 'No locked balances found');
         }
-      } else {
-        alert(data.error || 'No locked balances found');
+      } catch(e) {
+        document.getElementById('scanBtn').innerText = 'SCAN LOCKED BALANCES';
+        alert("Scan Error: Check network/passphrase");
       }
     }
 
     async function armBot() {
       const sponsors = document.getElementById('sponsorPool').value.split(/[\n,]+/).map(l=>l.trim()).filter(l=>l.split(/\s+/).length>=12);
+      if(sponsors.length === 0) return alert("Please enter at least 1 valid 24-word sponsor passphrase!");
+
+      document.getElementById('armBtn').innerText = 'SENDING COMMAND...';
+
       const payload = {
         operationMode: document.getElementById('mode').value,
         targetMnemonic: document.getElementById('targetMnemonic').value,
@@ -134,19 +136,25 @@
         surgeFee: document.getElementById('surgeFee').value
       };
 
-      const res = await fetch('/api/arm', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!data.success) alert(data.error);
+      try {
+        const res = await fetch('/api/arm', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        document.getElementById('armBtn').innerText = '🔥 ARM TITAN CLOUD BOT 🔥';
+        if (!data.success) alert("Failed to ARM: " + data.error);
+      } catch(e) {
+        document.getElementById('armBtn').innerText = '🔥 ARM TITAN CLOUD BOT 🔥';
+        alert("Network error while connecting to Railway server!");
+      }
     }
 
     async function disarmBot() {
       await fetch('/api/disarm', { method: 'POST' });
     }
 
-    // Auto-refresh terminal logs from Railway Cloud every 2 seconds
+    // Live Auto-Refresh every 1.5 seconds
     setInterval(async () => {
       try {
         const res = await fetch('/api/status');
@@ -155,7 +163,7 @@
         if (data.isArmed) {
           document.getElementById('armBtn').style.display = 'none';
           document.getElementById('disarmBtn').style.display = 'block';
-          document.getElementById('statusBadge').innerHTML = '<span class="armed">🔴 ARMED ON RAILWAY CLOUD</span>';
+          document.getElementById('statusBadge').innerHTML = '<span class="armed">🔴 ARMED & LOCKED IN RAILWAY RAM</span>';
         } else {
           document.getElementById('armBtn').style.display = 'block';
           document.getElementById('disarmBtn').style.display = 'none';
@@ -163,12 +171,14 @@
         }
 
         const logsBox = document.getElementById('logsBox');
-        logsBox.innerHTML = '';
-        data.logs.forEach(l => {
-          logsBox.innerHTML += `<div class="log-entry"><span class="log-time">[${l.time}]</span> <span class="${l.type}">${l.msg}</span></div>`;
-        });
+        if (data.logs && data.logs.length > 0) {
+          logsBox.innerHTML = '';
+          data.logs.forEach(l => {
+            logsBox.innerHTML += `<div class="log-entry"><span class="log-time">[${l.time}]</span> <span class="${l.type}">${l.msg}</span></div>`;
+          });
+        }
       } catch (e) {}
-    }, 2000);
+    }, 1500);
   </script>
 </body>
 </html>
