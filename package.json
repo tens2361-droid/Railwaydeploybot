@@ -1,7 +1,7 @@
 {
-  "name": "pi-titan-railway-bot",
-  "version": "6.0.0",
-  "description": "24/7 Railway Cloud Sniper for Pi Network",
+  "name": "pi-titan-railway-node",
+  "version": "7.0.0",
+  "description": "24/7 High-Precision Pi Network Cloud Sniper",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
