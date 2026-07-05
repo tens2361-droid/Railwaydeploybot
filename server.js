@@ -35,13 +35,13 @@ function getKeypair(mnemonic) {
 let botState = { isArmed: false, logs: [], timers: [] };
 
 function addLog(msg, type = 'info') {
-    const time = new Date().toLocaleTimeString();
+    // Force Indian Standard Time (IST) in logs
+    const time = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
     botState.logs.unshift({ time, msg, type });
     if (botState.logs.length > 100) botState.logs.pop();
     console.log(`[${time}] [${type.toUpperCase()}] ${msg}`);
 }
 
-// API 1: Scan Balances
 app.post('/api/scan', async (req, res) => {
     const { targetMnemonic } = req.body;
     const kp = getKeypair(targetMnemonic);
@@ -53,7 +53,6 @@ app.post('/api/scan', async (req, res) => {
     } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
-// API 2: Disarm / Abort
 app.post('/api/disarm', (req, res) => {
     botState.timers.forEach(t => clearTimeout(t));
     botState.timers = [];
@@ -62,7 +61,6 @@ app.post('/api/disarm', (req, res) => {
     res.json({ success: true });
 });
 
-// API 3: Instant Strike Arming
 app.post('/api/arm', async (req, res) => {
     const { operationMode, targetMnemonic, sponsorPool, receiverAddress, selectedBalanceId, targetTime, surgeFee } = req.body;
     
@@ -72,15 +70,26 @@ app.post('/api/arm', async (req, res) => {
     botState.timers = [];
     addLog(`🔥 TITAN ARMED! Mode: ${operationMode} | Sponsors: ${sponsorPool.length} | Fee: ${surgeFee} PI`, "warning");
 
-    const [h, m, s] = targetTime.split(':');
-    let targetTs = new Date().setHours(h, m, s, 0);
-    if (targetTs <= Date.now()) targetTs += 86400000;
-
     try {
+        // 🔥 PERFECT TIMEZONE FIX (Converts IST Target Time to UTC Timestamp exactly)
+        const [targetH, targetM, targetS] = targetTime.split(':').map(Number);
+        const nowIST = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"}));
+        
+        let targetIST = new Date(nowIST);
+        targetIST.setHours(targetH, targetM, targetS || 0, 0);
+        
+        // If time passed today in IST, set for tomorrow
+        if (targetIST.getTime() <= nowIST.getTime()) {
+            targetIST.setDate(targetIST.getDate() + 1);
+        }
+        
+        // Calculate exact delay from current absolute time
+        const delayMs = targetIST.getTime() - nowIST.getTime();
+        addLog(`Target locked: ${targetTime} IST. Countdown: ${(delayMs/1000).toFixed(1)} seconds.`, "info");
+
         const targetKp = getKeypair(targetMnemonic);
         if (!targetKp) throw new Error("Invalid Sender Passphrase");
 
-        // Amount math
         let amountToSendStr = "0.01";
         if (operationMode === 'claim_and_transfer') {
             const cbRes = await piServer.claimableBalances().claimant(targetKp.publicKey()).limit(10).call();
@@ -94,14 +103,12 @@ app.post('/api/arm', async (req, res) => {
             amountToSendStr = Math.max(0, parseFloat(native.balance) - 1.05).toFixed(7);
         }
 
-        addLog(`Preparing to sweep ${amountToSendStr} PI to ${receiverAddress.substring(0,8)}...`, "info");
-
         const TxBuilderClass = StellarSdk.TransactionBuilder || StellarSdk.Horizon?.TransactionBuilder;
         const AccountClass = StellarSdk.Account;
         const OperationClass = StellarSdk.Operation;
         const AssetClass = StellarSdk.Asset;
 
-        // Build XDR packets
+        // Auto-Sharding Rule: 1 Sponsor = 1 Tx, 5 Sponsor = 5 Tx
         const tasks = sponsorPool.map(async (mn, i) => {
             const spKp = getKeypair(mn);
             if (!spKp) return null;
@@ -133,12 +140,15 @@ app.post('/api/arm', async (req, res) => {
         });
 
         const packets = (await Promise.all(tasks)).filter(Boolean);
-        addLog(`✅ ${packets.length} Packets pre-signed & locked in Railway RAM! Waiting for T-0...`, "success");
+        addLog(`✅ ${packets.length} Packets pre-signed & locked in Railway RAM!`, "success");
         
-        // Exact Millisecond Trigger
+        // Exact Millisecond Fire Engine
         [1, 2, 3].forEach(wave => {
             const waves = packets.filter(p => p.wave === wave);
-            const delay = Math.max(0, (targetTs - (wave * 1000)) - Date.now());
+            if (waves.length === 0) return;
+
+            // Fire T-3s, T-2s, T-1s before target
+            const waveDelay = Math.max(0, delayMs - (wave * 1000));
             
             const timer = setTimeout(() => {
                 addLog(`💥 FIRING WAVE T-${wave}s (${waves.length} SHOTS)...`, "warning");
@@ -153,7 +163,7 @@ app.post('/api/arm', async (req, res) => {
                     }).catch(e => addLog(`[Shot #${idx+1}] Network Error`, "error"));
                 });
                 if (wave === 1) botState.isArmed = false;
-            }, delay);
+            }, waveDelay);
 
             botState.timers.push(timer);
         });
