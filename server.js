@@ -14,7 +14,7 @@ const HORIZON_URL = "https://api.mainnet.minepi.com";
 const piServer = new Server(HORIZON_URL);
 const NETWORK_PASSPHRASE = "Pi Network";
 
-// Keypair Generator
+// Keypair Generator for Pi Network (Derivation path: m/44'/314159'/0')
 function getKeypair(mnemonic) {
   try {
     const seed = bip39.mnemonicToSeedSync(mnemonic.toLowerCase().trim());
@@ -25,7 +25,7 @@ function getKeypair(mnemonic) {
   }
 }
 
-// Deep Lock Decoder
+// Deep Lock Decoder (Extracts exact Locked Until timestamp)
 function extractTrueUnlockTime(predicate) {
   if (!predicate) return null;
   let maxTime = 0;
@@ -50,12 +50,12 @@ function extractTrueUnlockTime(predicate) {
   return maxStr;
 }
 
-// Global Bot State in Cloud RAM
+// Global Bot State
 let botState = {
   isArmed: false,
   logs: [],
   timeOffset: 0,
-  driftMs: -150, // Cloud optimized
+  driftMs: -150, // Cloud optimized latency
   heartbeatTimer: null,
   armTimer: null,
   fireTimers: []
@@ -76,14 +76,14 @@ async function calibrateClock() {
     const data = await res.json();
     const latency = (Date.now() - start) / 2;
     botState.timeOffset = new Date(data.utc_datetime).getTime() - (start + latency);
-    addLog(`NTP Synced. Railway Offset: ${botState.timeOffset}ms`, 'success');
+    addLog(`NTP Synced. Railway Cloud Offset: ${botState.timeOffset}ms`, 'success');
   } catch (e) {
     addLog('NTP Sync failed. Using Railway server hardware time.', 'warning');
   }
 }
 calibrateClock();
 
-// API 1: Scan Balances
+// API 1: Scan Locked Balances
 app.post('/api/scan', async (req, res) => {
   const { targetMnemonic } = req.body;
   const kp = getKeypair(targetMnemonic);
@@ -117,15 +117,14 @@ app.post('/api/arm', async (req, res) => {
   }
 
   botState.isArmed = true;
-  addLog(`🔥 TITAN BOT ARMED! Sponsors loaded: ${sponsorPool.length} | Max Fee: ${surgeFee} PI`, 'warning');
+  addLog(`🔥 TITAN CLOUD BOT ARMED! Sponsors: ${sponsorPool.length} | God Fee: ${surgeFee} PI`, 'warning');
 
-  // Parse Target Time
   const now = new Date(Date.now() + botState.timeOffset);
   const [hours, minutes, seconds] = targetTime.split(':').map(Number);
   let targetTimestamp = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, seconds || 0).getTime();
   if (targetTimestamp <= now.getTime()) targetTimestamp += 86400000;
 
-  // Schedule Build 10 Minutes Before T-0
+  // Build 10 Minutes Before T-0 to avoid any network delay
   const buildTime = targetTimestamp - (10 * 60 * 1000);
   const delayToBuild = buildTime - (Date.now() + botState.timeOffset);
 
@@ -147,7 +146,7 @@ app.post('/api/arm', async (req, res) => {
         amountToSendStr = (parseFloat(native.balance) - 1.01).toFixed(7);
       }
 
-      // Parallel Fetch Accounts
+      // Parallel Fetch Accounts (Loads 30 wallets in 1 second)
       const tasks = sponsorPool.map(async (mn, idx) => {
         const spKp = getKeypair(mn);
         if (!spKp) return null;
@@ -160,17 +159,17 @@ app.post('/api/arm', async (req, res) => {
       const loadedSponsors = (await Promise.all(tasks)).filter(Boolean);
       addLog(`Loaded ${loadedSponsors.length} active sponsor ledgers in RAM!`, 'success');
 
-      // Build XDRs (Dynamic Sharding Rule: 1 sponsor = 1 tx, 5 sponsors = 5 txs)
+      // 🔥 DYNAMIC SHARDING RULE: Exactly 1 Tx per Sponsor!
       const feeInStroops = Math.round(parseFloat(surgeFee) * 10000000).toString();
       const rawXdrs = [];
-      const waveOffsets = [1, 2, 3]; // Distribute shots across T-1s, T-2s, T-3s
+      const waveOffsets = [1, 2, 3]; 
 
       loadedSponsors.forEach(item => {
         const { spKp, baseSeq, idx } = item;
         const txBuilder = new TransactionBuilder(new Account(spKp.publicKey(), baseSeq), {
           fee: feeInStroops,
           networkPassphrase: NETWORK_PASSPHRASE
-        }).setTimeout(600);
+        }).setTimeout(600); // 10 minute validity
 
         if (operationMode === 'claim_and_transfer') {
           txBuilder.addOperation(Operation.claimClaimableBalance({
@@ -192,13 +191,13 @@ app.post('/api/arm', async (req, res) => {
 
         rawXdrs.push({
           xdr: tx.toXDR(),
-          secOffset: waveOffsets[idx % 3]
+          secOffset: waveOffsets[idx % 3] // Distributes shots across T-1s, T-2s, T-3s
         });
       });
 
-      addLog(`✅ Pre-signed ${rawXdrs.length} lethal XDR payloads! Waiting for T-0...`, 'success');
+      addLog(`✅ Pre-signed exactly ${rawXdrs.length} lethal XDR payloads! Ready for T-0.`, 'success');
 
-      // Start TCP Keep-Alive Heartbeat (Prevents 120s Stale Socket Trap)
+      // 🔥 TCP KEEP-ALIVE HEARTBEAT (Prevents Stale Socket 120s Hang Trap)
       botState.heartbeatTimer = setInterval(() => {
         fetch(`${HORIZON_URL}/fee_stats`).catch(() => {});
       }, 10000);
